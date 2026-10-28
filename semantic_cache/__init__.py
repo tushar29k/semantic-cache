@@ -1,8 +1,11 @@
 """semantic-cache: exact + semantic caching for LLM responses.
 
-Day 1 is the scaffold — the two tiers live here as the week builds them:
-exact match (SQLite, day 2) checked first, semantic similarity (day 3)
-second, model call only on a miss in both.
+Two tiers checked in order: exact match (SQLite, day 2) first, semantic
+similarity (day 3) second, model call only on a miss in both.
 """
 
-__version__ = "0.1.0"
+from .exact import ExactCache, key_for, normalize_prompt
+
+__version__ = "0.2.0"
+
+__all__ = ["ExactCache", "key_for", "normalize_prompt"]

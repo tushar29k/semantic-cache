@@ -90,9 +90,28 @@ one SQLite file, day 2's simplicity is the point). Not a prompt router:
 it never picks which model answers, it only remembers what a model
 already said. Not a store for anything but LLM responses.
 
+## Usage — tier 1 (day 2)
+
+```python
+from semantic_cache import ExactCache
+
+cache = ExactCache(path="cache.db")  # :memory: by default
+cache.store("What is the refund window?", "30 days", model="gemini")
+cache.lookup("  WHAT   is the refund window? ")  # "30 days" — same key
+cache.lookup("what is the warranty?")           # None — a miss
+```
+
+TTL defaults to 24 hours and is enforced on read: an expired entry is
+a miss and its row is dropped, so a stale answer can never be served.
+Pass `ttl=` per store to override, or `ttl=0` for an entry that expires
+immediately. A `now_fn` argument on the constructor exists so tests can
+advance a fake clock instead of sleeping through a real TTL.
+
 ## Current state
 
-Version 0.1.0 — scaffold only. The tiers above are the contract the
-week builds against; `tests/run_tests.py` checks the scaffold (package
-imports, version, README carries the architecture sections) and runs
-offline with no dependencies beyond the standard library.
+Version 0.2.0 — tier 1 done. `semantic_cache/exact.py` holds the tier
+(`normalize_prompt`, `key_for`, `ExactCache` with store/lookup/lookup_entry/
+count/clear, SQLite, TTL on read); `tests/run_tests.py` covers it
+(29 checks: normalization, SHA-256 keys, roundtrip, overwrite, TTL
+expiry via a fake clock, persistence across reopen — all green offline,
+standard library only). Tier 2 (semantic similarity) lands on day 3.
