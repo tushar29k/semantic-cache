@@ -13,7 +13,15 @@ import tempfile
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import semantic_cache
-from semantic_cache import ExactCache, key_for, normalize_prompt
+from semantic_cache import (
+    DEFAULT_THRESHOLD,
+    ExactCache,
+    HashEmbedder,
+    SemanticCache,
+    cosine_similarity,
+    key_for,
+    normalize_prompt,
+)
 
 FAILED = []
 
@@ -36,7 +44,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # scaffold checks (day 1, kept green)
 check("package imports", semantic_cache is not None)
-check("version is 0.2.0", semantic_cache.__version__ == "0.2.0",
+check("version is 0.3.0", semantic_cache.__version__ == "0.3.0",
       semantic_cache.__version__)
 
 with open(os.path.join(ROOT, "README.md")) as f:
@@ -109,6 +117,74 @@ with tempfile.TemporaryDirectory() as tmp:
           second.lookup("persist?") == "still here")
     check("reopened entry keeps its model",
           second.lookup_entry("persist?")["model"] == "mock")
+    second.close()
+
+# semantic tier (day 3)
+check("default threshold is 0.90", DEFAULT_THRESHOLD == 0.90)
+
+embedder = HashEmbedder()
+vec_a = embedder.embed("what is the refund window?")
+vec_b = embedder.embed("  WHAT   is the refund window? ")
+check("identical prompts embed to cosine 1.0",
+      abs(cosine_similarity(vec_a, vec_b) - 1.0) < 1e-9)
+vec_c = embedder.embed("explain quantum entanglement simply")
+check("unrelated prompts score near zero",
+      cosine_similarity(vec_a, vec_c) < 0.5)
+check("empty prompt embeds to the zero vector",
+      all(v == 0.0 for v in embedder.embed("   ")))
+check("cosine with a zero vector is 0.0",
+      cosine_similarity(vec_a, embedder.embed("   ")) == 0.0)
+check("embedder is deterministic across instances",
+      HashEmbedder().embed("same prompt") == HashEmbedder().embed("same prompt"))
+
+sem = SemanticCache()
+check("empty prompt has no semantic entry to store",
+      raises(lambda: sem.store("   ")))
+check("miss on empty semantic cache",
+      sem.lookup("what is the refund window?") is None)
+sem.store("what is the refund window?")
+hit = sem.lookup("what is the refund window?")
+check("identical prompt is a semantic hit at 1.0",
+      hit is not None and hit["prompt"] == "what is the refund window?"
+      and abs(hit["similarity"] - 1.0) < 1e-9)
+check("semantic lookup is normalization-insensitive",
+      sem.lookup("  WHAT is the refund window? ") is not None)
+check("unrelated prompt still misses the semantic tier",
+      sem.lookup("explain quantum entanglement simply") is None)
+
+# one word changed in a 12-word prompt: 14/15 ≈ 0.933, clears 0.90
+sem.store("how do i reset my account password if i forgot it today")
+hit = sem.lookup("how do i reset my account password if i forgot it now")
+check("near-duplicate clears the 0.90 threshold",
+      hit is not None and hit["similarity"] >= 0.90, str(hit))
+# one word changed in a 6-word prompt: 5/6 ≈ 0.833, below 0.90
+sem.store("what is the refund policy here")
+check("one-word change in a short prompt misses at 0.90",
+      sem.lookup("what is the warranty policy here") is None)
+check("lower threshold rescues the short-prompt near-miss",
+      sem.lookup("what is the warranty policy here", threshold=0.79) is not None)
+
+# best match wins over a merely close one
+sem2 = SemanticCache()
+sem2.store("how do i cancel my subscription")
+sem2.store("how do i change my billing address")
+hit = sem2.lookup("how do i change my billing address today")
+check("best match wins, not just any match above threshold",
+      hit is not None and hit["prompt"] == "how do i change my billing address")
+check("count counts semantic rows", sem2.count() == 2)
+sem2.clear()
+check("clear empties the semantic cache", sem2.count() == 0)
+
+# persistence: embeddings survive close + reopen
+with tempfile.TemporaryDirectory() as tmp:
+    path = os.path.join(tmp, "sem.db")
+    first = SemanticCache(path=path)
+    first.store("how do i reset my account password if i forgot it today")
+    first.close()
+    second = SemanticCache(path=path)
+    hit = second.lookup("how do i reset my account password if i forgot it now")
+    check("semantic entries survive reopen",
+          hit is not None and hit["similarity"] >= 0.90)
     second.close()
 
 print(f"\n{len(FAILED)} failed" if FAILED else "\nall checks passed")

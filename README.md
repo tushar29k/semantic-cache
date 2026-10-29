@@ -107,11 +107,36 @@ Pass `ttl=` per store to override, or `ttl=0` for an entry that expires
 immediately. A `now_fn` argument on the constructor exists so tests can
 advance a fake clock instead of sleeping through a real TTL.
 
+## Usage — tier 2 (day 3)
+
+```python
+from semantic_cache import SemanticCache
+
+sem = SemanticCache(path="cache.db")  # :memory: by default
+sem.store("how do i reset my account password if i forgot it today")
+sem.lookup("how do i reset my account password if i forgot it now")
+# {"prompt": "how do i reset my account password if i forgot it today",
+#  "similarity": 0.933} — a hit, one word changed in twelve
+sem.lookup("what is the warranty policy here")  # None — too far to trust
+```
+
+`lookup` returns the best-matching cached prompt plus its cosine
+similarity, or `None` below the threshold (default 0.90, overridable per
+call). The default embedder is a deterministic word-hash stand-in, so
+the tier catches paraphrases that share most of their words; pairs that
+share meaning but not words ("refund window" vs "return something")
+still miss until a real embedding model swaps in via the `# SWAP:`
+seam — pass `embed_fn=` to the constructor and the lookup logic never
+changes. Day 5's service wires the two tiers together: exact first,
+semantic second, model call only on a miss in both.
+
 ## Current state
 
-Version 0.2.0 — tier 1 done. `semantic_cache/exact.py` holds the tier
-(`normalize_prompt`, `key_for`, `ExactCache` with store/lookup/lookup_entry/
-count/clear, SQLite, TTL on read); `tests/run_tests.py` covers it
-(29 checks: normalization, SHA-256 keys, roundtrip, overwrite, TTL
-expiry via a fake clock, persistence across reopen — all green offline,
-standard library only). Tier 2 (semantic similarity) lands on day 3.
+Version 0.3.0 — tiers 1 and 2 done. `semantic_cache/semantic.py` holds
+tier 2 (`HashEmbedder` deterministic offline stand-in, `cosine_similarity`,
+`SemanticCache` with store/lookup/count/clear on SQLite, hit iff
+similarity ≥ 0.90 by default); `tests/run_tests.py` covers it
+(47 checks: the 29 tier-1 checks plus embedder determinism, threshold
+behavior at 0.90 vs a lower override, best-match-wins, and embedding
+persistence across reopen — all green offline, standard library only).
+Day 4 adds hit-rate / latency-saved metrics.
