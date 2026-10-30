@@ -1,0 +1,3 @@
+fastapi
+uvicorn
+httpx  # TestClient for the offline service tests

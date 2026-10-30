@@ -34,7 +34,8 @@ class ExactCache:
                  now_fn=None):
         # now_fn is a seam for tests: advance a fake clock instead of sleeping
         self._now = now_fn or time.time
-        self._conn = sqlite3.connect(path)
+        # the service answers on worker threads — one connection must serve them
+        self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS entries ("
             "  key TEXT PRIMARY KEY,"

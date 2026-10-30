@@ -72,7 +72,8 @@ class SemanticCache:
         # a hosted API behind an env key) — lookup logic never changes
         self._embed = embed_fn or HashEmbedder().embed
         self.threshold = threshold
-        self._conn = sqlite3.connect(path)
+        # same reason as tier 1: the service answers on worker threads
+        self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS semantic_entries ("
             "  key TEXT PRIMARY KEY,"

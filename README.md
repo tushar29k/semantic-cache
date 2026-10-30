@@ -150,13 +150,41 @@ never a fake 100%), and without a `cost_per_call` the cost field stays
 `None` rather than inventing a price. Day 5's service records outcomes
 automatically and serves this summary at `/stats`.
 
+## Usage — service (day 5)
+
+```bash
+pip install -r requirements.txt
+uvicorn semantic_cache.service:app --port 8000
+```
+
+```bash
+curl -X POST localhost:8000/store \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "What is the refund window?", "response": "30 days"}'
+curl -X POST localhost:8000/lookup \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "what is the refund window?"}'
+# {"response": "30 days", "tier": "exact", "similarity": null}
+curl localhost:8000/stats   # day-4 summary + live entry counts
+```
+
+`semantic_cache/service.py` wires the tiers in order (exact, then
+semantic, then the model call on a miss — and a miss is stored in both
+tiers, so the next identical prompt is an exact hit). Every lookup
+records its outcome in `CacheMetrics`, so `/stats` is the live version
+of the day-4 summary. The model is a mock by default (`model_fn=` swaps
+in a real call); `CACHE_DB_PATH` picks the SQLite file (default
+`cache.db`), `MODEL_LATENCY_MS`/`cost_per_call` feed the savings math.
+One gotcha found while testing: FastAPI answers on worker threads, so
+both tiers now open SQLite with `check_same_thread=False` — without it
+the service crashed on the first `/store`.
+
 ## Current state
 
-Version 0.4.0 — tiers 1 and 2 plus metrics done.
-`semantic_cache/metrics.py` holds `CacheMetrics` (exact/semantic/miss
-counters, hit and per-tier rates, latency saved, optional cost saving
-from a caller-supplied price, `reset()`); `tests/run_tests.py` covers it
-(60 checks: the 47 tier checks plus empty-metrics rates, per-tier rate
-splits, miss latency excluded from savings, cost arithmetic, unknown
-outcomes rejected, reset — all green offline, standard library only).
-Day 5 adds the FastAPI service.
+Version 0.5.0 — tiers 1 and 2, metrics, and the service done.
+`semantic_cache/service.py` holds the FastAPI app (`/store`, `/lookup`,
+`/stats`, `/health`, `create_app()` factory so tests inject in-memory
+tiers and a fake model); `tests/run_tests.py` covers it (65 checks: the
+57 earlier checks plus health/version, empty-prompt 400, store key,
+exact/semantic/miss tiers through HTTP, stats counts and hit-only
+latency — all green offline). Day 6 adds evals on a synthetic workload.

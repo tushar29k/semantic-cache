@@ -48,7 +48,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # scaffold checks (day 1, kept green)
 check("package imports", semantic_cache is not None)
-check("version is 0.4.0", semantic_cache.__version__ == "0.4.0",
+check("version is 0.5.0", semantic_cache.__version__ == "0.5.0",
       semantic_cache.__version__)
 
 with open(os.path.join(ROOT, "README.md")) as f:
@@ -223,6 +223,47 @@ check("unknown outcome fails loud",
 m.reset()
 check("reset zeroes every counter",
       m.total == 0 and m.latency_saved_ms == 0.0 and m.hit_rate == 0.0)
+
+# FastAPI service (day 5) — skipped, not failed, where fastapi is absent
+try:
+    from fastapi.testclient import TestClient
+    from semantic_cache import ExactCache as _EC, SemanticCache as _SC
+    from semantic_cache.service import create_app as _create_app
+
+    _app = _create_app(_EC(), _SC(), CacheMetrics(),
+                       model_fn=lambda p: "model says: " + p)
+    _client = TestClient(_app)
+    check("service health reports the package version",
+          _client.get("/health").json() == {"status": "ok", "version": "0.5.0"})
+    check("empty prompt is a 400, not a stored blank",
+          _client.post("/lookup", json={"prompt": "   "}).status_code == 400)
+    r = _client.post("/store", json={"prompt": "What is the refund window?",
+                                     "response": "30 days"})
+    check("store reports the stored key", r.status_code == 200
+          and r.json()["stored"] is True and len(r.json()["key"]) == 64)
+    r = _client.post("/lookup", json={"prompt": "  WHAT is the refund window? "})
+    check("exact tier serves a stored prompt via the service",
+          r.json() == {"response": "30 days", "tier": "exact",
+                       "similarity": None}, str(r.json()))
+    r = _client.post("/lookup", json={
+        "prompt": "how do i reset my account password if i forgot it today"})
+    check("first unseen prompt is a miss and calls the model",
+          r.json()["tier"] == "miss"
+          and r.json()["response"].startswith("model says: "))
+    r = _client.post("/lookup", json={
+        "prompt": "how do i reset my account password if i forgot it now"})
+    check("near-duplicate second prompt is a semantic hit",
+          r.json()["tier"] == "semantic"
+          and r.json()["similarity"] >= 0.90, str(r.json()))
+    stats = _client.get("/stats").json()
+    check("stats count the service lookups",
+          stats["total_lookups"] == 3 and stats["exact_hits"] == 1
+          and stats["semantic_hits"] == 1 and stats["misses"] == 1
+          and stats["exact_entries"] == 2, str(stats))
+    check("stats latency saved only counts hits",
+          stats["latency_saved_ms"] > 0, str(stats))
+except ImportError:
+    print("SKIP service checks — fastapi/httpx not installed")
 
 print(f"\n{len(FAILED)} failed" if FAILED else "\nall checks passed")
 sys.exit(1 if FAILED else 0)
