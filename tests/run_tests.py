@@ -15,6 +15,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import semantic_cache
 from semantic_cache import (
     DEFAULT_THRESHOLD,
+    CacheMetrics,
+    EXACT_HIT,
+    MISS,
+    SEMANTIC_HIT,
     ExactCache,
     HashEmbedder,
     SemanticCache,
@@ -44,7 +48,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # scaffold checks (day 1, kept green)
 check("package imports", semantic_cache is not None)
-check("version is 0.3.0", semantic_cache.__version__ == "0.3.0",
+check("version is 0.4.0", semantic_cache.__version__ == "0.4.0",
       semantic_cache.__version__)
 
 with open(os.path.join(ROOT, "README.md")) as f:
@@ -186,6 +190,39 @@ with tempfile.TemporaryDirectory() as tmp:
     check("semantic entries survive reopen",
           hit is not None and hit["similarity"] >= 0.90)
     second.close()
+
+# metrics (day 4)
+empty = CacheMetrics()
+check("empty metrics report 0.0 rates, not a crash",
+      empty.hit_rate == 0.0 and empty.miss_rate == 0.0 and empty.total == 0)
+check("empty summary has no invented cost saving",
+      empty.summary()["estimated_cost_saved"] is None)
+
+m = CacheMetrics()
+m.record(EXACT_HIT, latency_saved_ms=2000.0)
+m.record(EXACT_HIT, latency_saved_ms=1500.0)
+m.record(SEMANTIC_HIT, latency_saved_ms=1800.0)
+m.record(MISS)
+m.record(MISS, latency_saved_ms=9999.0)  # a miss saves nothing, by design
+check("metrics count each outcome", m.total == 5 and m.hits == 3
+      and m.exact_hits == 2 and m.semantic_hits == 1 and m.misses == 2)
+check("hit rate is hits / total", abs(m.hit_rate - 0.6) < 1e-9)
+check("per-tier rates split the total",
+      abs(m.exact_hit_rate - 0.4) < 1e-9
+      and abs(m.semantic_hit_rate - 0.2) < 1e-9
+      and abs(m.miss_rate - 0.4) < 1e-9)
+check("miss latency is not counted as saved",
+      m.latency_saved_ms == 5300.0, str(m.latency_saved_ms))
+summary = m.summary(cost_per_call=0.02)
+check("summary cost saving is hits x cost per call",
+      summary["estimated_cost_saved"] == 0.06, str(summary))
+check("summary per-hit latency divides by hits only",
+      abs(summary["latency_saved_per_hit_ms"] - 5300.0 / 3) < 1e-9)
+check("unknown outcome fails loud",
+      raises(lambda: m.record("maybe")))
+m.reset()
+check("reset zeroes every counter",
+      m.total == 0 and m.latency_saved_ms == 0.0 and m.hit_rate == 0.0)
 
 print(f"\n{len(FAILED)} failed" if FAILED else "\nall checks passed")
 sys.exit(1 if FAILED else 0)

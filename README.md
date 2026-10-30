@@ -130,13 +130,33 @@ seam — pass `embed_fn=` to the constructor and the lookup logic never
 changes. Day 5's service wires the two tiers together: exact first,
 semantic second, model call only on a miss in both.
 
+## Usage — metrics (day 4)
+
+```python
+from semantic_cache import CacheMetrics, EXACT_HIT, MISS, SEMANTIC_HIT
+
+metrics = CacheMetrics()
+metrics.record(EXACT_HIT, latency_saved_ms=2000.0)  # a hit, 2s not spent
+metrics.record(MISS)                                # a miss saves nothing
+metrics.summary(cost_per_call=0.02)
+# {"total_lookups": 2, "exact_hits": 1, ..., "hit_rate": 0.5,
+#  "latency_saved_ms": 2000.0, "estimated_cost_saved": 0.02}
+```
+
+`CacheMetrics` only counts — callers record each lookup's outcome and,
+on a hit, the milliseconds the model call would have taken minus the
+lookup itself. Rates are 0.0 before any lookup (never a division error,
+never a fake 100%), and without a `cost_per_call` the cost field stays
+`None` rather than inventing a price. Day 5's service records outcomes
+automatically and serves this summary at `/stats`.
+
 ## Current state
 
-Version 0.3.0 — tiers 1 and 2 done. `semantic_cache/semantic.py` holds
-tier 2 (`HashEmbedder` deterministic offline stand-in, `cosine_similarity`,
-`SemanticCache` with store/lookup/count/clear on SQLite, hit iff
-similarity ≥ 0.90 by default); `tests/run_tests.py` covers it
-(47 checks: the 29 tier-1 checks plus embedder determinism, threshold
-behavior at 0.90 vs a lower override, best-match-wins, and embedding
-persistence across reopen — all green offline, standard library only).
-Day 4 adds hit-rate / latency-saved metrics.
+Version 0.4.0 — tiers 1 and 2 plus metrics done.
+`semantic_cache/metrics.py` holds `CacheMetrics` (exact/semantic/miss
+counters, hit and per-tier rates, latency saved, optional cost saving
+from a caller-supplied price, `reset()`); `tests/run_tests.py` covers it
+(60 checks: the 47 tier checks plus empty-metrics rates, per-tier rate
+splits, miss latency excluded from savings, cost arithmetic, unknown
+outcomes rejected, reset — all green offline, standard library only).
+Day 5 adds the FastAPI service.

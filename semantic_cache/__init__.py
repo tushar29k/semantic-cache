@@ -5,6 +5,7 @@ similarity (day 3) second, model call only on a miss in both.
 """
 
 from .exact import ExactCache, key_for, normalize_prompt
+from .metrics import EXACT_HIT, MISS, SEMANTIC_HIT, CacheMetrics
 from .semantic import (
     DEFAULT_THRESHOLD,
     HashEmbedder,
@@ -12,9 +13,13 @@ from .semantic import (
     cosine_similarity,
 )
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
+    "CacheMetrics",
+    "EXACT_HIT",
+    "MISS",
+    "SEMANTIC_HIT",
     "ExactCache",
     "HashEmbedder",
     "SemanticCache",
