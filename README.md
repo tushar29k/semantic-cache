@@ -179,12 +179,37 @@ One gotcha found while testing: FastAPI answers on worker threads, so
 both tiers now open SQLite with `check_same_thread=False` — without it
 the service crashed on the first `/store`.
 
+## Evals (day 6)
+
+```bash
+python evals/run_evals.py
+```
+
+A fixed synthetic workload through the real service: 12 seed questions,
+each asked four ways (the seed, an exact repeat, a casing/spacing
+variant, a near-duplicate with one word changed), plus 6 unrelated
+questions that must miss. Results, reproducible run after run:
+
+| | |
+|---|---|
+| Lookups | 54 |
+| Exact hits | 24 |
+| Semantic hits | 12 |
+| Misses (= model calls) | 18 |
+| Hit rate | 0.667 |
+| Latency saved | ~72,000 ms (at 2,000 ms per model call) |
+| Cost saved | $0.72 (at $0.02 per model call) |
+
+The numbers are honest about the stand-in embedder: near-duplicates hit
+because they share 11 of 12 words, not because the embedder understands
+meaning — true-synonym pairs still miss, which is exactly what day 3's
+limitation note says. Swap in a real embedding model and the semantic
+column is the one that should grow.
+
 ## Current state
 
-Version 0.5.0 — tiers 1 and 2, metrics, and the service done.
-`semantic_cache/service.py` holds the FastAPI app (`/store`, `/lookup`,
-`/stats`, `/health`, `create_app()` factory so tests inject in-memory
-tiers and a fake model); `tests/run_tests.py` covers it (65 checks: the
-57 earlier checks plus health/version, empty-prompt 400, store key,
-exact/semantic/miss tiers through HTTP, stats counts and hit-only
-latency — all green offline). Day 6 adds evals on a synthetic workload.
+Version 0.6.0 — tiers 1 and 2, metrics, service, and evals done.
+`evals/run_evals.py` holds the workload and the report; `tests/run_tests.py`
+covers it (70 checks: the 65 earlier checks plus workload size, the
+24/12 hit split, misses equal model calls, hit-rate 2/3, and cost
+arithmetic — all green offline). Day 7 adds Docker + CI + release notes.

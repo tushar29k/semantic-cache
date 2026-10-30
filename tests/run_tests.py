@@ -48,7 +48,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # scaffold checks (day 1, kept green)
 check("package imports", semantic_cache is not None)
-check("version is 0.5.0", semantic_cache.__version__ == "0.5.0",
+check("version is 0.6.0", semantic_cache.__version__ == "0.6.0",
       semantic_cache.__version__)
 
 with open(os.path.join(ROOT, "README.md")) as f:
@@ -226,6 +226,9 @@ check("reset zeroes every counter",
 
 # FastAPI service (day 5) — skipped, not failed, where fastapi is absent
 try:
+    # importing the service module builds the module-level app; keep that
+    # app in-memory so a test run never leaves a cache.db in the repo
+    os.environ["CACHE_DB_PATH"] = ":memory:"
     from fastapi.testclient import TestClient
     from semantic_cache import ExactCache as _EC, SemanticCache as _SC
     from semantic_cache.service import create_app as _create_app
@@ -234,7 +237,8 @@ try:
                        model_fn=lambda p: "model says: " + p)
     _client = TestClient(_app)
     check("service health reports the package version",
-          _client.get("/health").json() == {"status": "ok", "version": "0.5.0"})
+          _client.get("/health").json()
+          == {"status": "ok", "version": semantic_cache.__version__})
     check("empty prompt is a 400, not a stored blank",
           _client.post("/lookup", json={"prompt": "   "}).status_code == 400)
     r = _client.post("/store", json={"prompt": "What is the refund window?",
@@ -264,6 +268,23 @@ try:
           stats["latency_saved_ms"] > 0, str(stats))
 except ImportError:
     print("SKIP service checks — fastapi/httpx not installed")
+
+# evals (day 6) — same workload shape the script reports, via its code
+try:
+    sys.path.insert(0, os.path.join(ROOT, "evals"))
+    import run_evals
+    eval_stats = run_evals.evaluate()
+    check("eval workload is 54 lookups", eval_stats["total_lookups"] == 54)
+    check("eval hits split 24 exact / 12 semantic",
+          eval_stats["exact_hits"] == 24 and eval_stats["semantic_hits"] == 12)
+    check("eval misses are exactly the model calls",
+          eval_stats["misses"] == 18
+          and eval_stats["model_calls"] == eval_stats["misses"])
+    check("eval hit rate is 2/3", abs(eval_stats["hit_rate"] - 2 / 3) < 1e-9)
+    check("eval cost saved is hits x $0.02",
+          abs(eval_stats["estimated_cost_saved"] - 0.72) < 1e-9)
+except ImportError:
+    print("SKIP eval checks — fastapi/httpx not installed")
 
 print(f"\n{len(FAILED)} failed" if FAILED else "\nall checks passed")
 sys.exit(1 if FAILED else 0)
