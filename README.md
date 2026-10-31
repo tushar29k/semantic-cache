@@ -206,10 +206,26 @@ meaning — true-synonym pairs still miss, which is exactly what day 3's
 limitation note says. Swap in a real embedding model and the semantic
 column is the one that should grow.
 
+## Docker + CI (day 7)
+
+```bash
+docker build -t semantic-cache .
+docker run -p 8000:8000 semantic-cache
+# then: curl localhost:8000/health
+```
+
+`.github/workflows/ci.yml` gates every push/PR to main on
+`tests/run_tests.py` and `evals/run_evals.py` — both offline and
+deterministic, so a red build is a real regression. `RELEASES.md`
+tracks each version. Caveat, stated plainly: no docker daemon exists
+in the build sandbox, so `docker build` / `docker run` are unverified
+here and stay a manual step on a docker machine; the image definition
+and the CI workflow are what ship, and the CI steps themselves were
+verified locally in order (tests, then evals).
+
 ## Current state
 
-Version 0.6.0 — tiers 1 and 2, metrics, service, and evals done.
-`evals/run_evals.py` holds the workload and the report; `tests/run_tests.py`
-covers it (70 checks: the 65 earlier checks plus workload size, the
-24/12 hit split, misses equal model calls, hit-rate 2/3, and cost
-arithmetic — all green offline). Day 7 adds Docker + CI + release notes.
+Version 0.7.0 — week 2 complete: tiers 1 and 2, metrics, service,
+evals, Docker, CI, and release notes. `tests/run_tests.py` covers the
+whole build (the 70 earlier checks plus workflow-parse, gated-steps,
+Dockerfile-serve, and release-notes checks — all green offline).

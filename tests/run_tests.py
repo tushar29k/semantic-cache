@@ -48,7 +48,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # scaffold checks (day 1, kept green)
 check("package imports", semantic_cache is not None)
-check("version is 0.6.0", semantic_cache.__version__ == "0.6.0",
+check("version is 0.7.0", semantic_cache.__version__ == "0.7.0",
       semantic_cache.__version__)
 
 with open(os.path.join(ROOT, "README.md")) as f:
@@ -285,6 +285,23 @@ try:
           abs(eval_stats["estimated_cost_saved"] - 0.72) < 1e-9)
 except ImportError:
     print("SKIP eval checks — fastapi/httpx not installed")
+
+# CI + Docker + release notes (day 7) — plain-text checks, so the
+# workflow stays green without adding a yaml dependency to requirements
+with open(os.path.join(ROOT, ".github/workflows/ci.yml")) as f:
+    _ci_steps = f.read()
+check("CI workflow gates on tests + evals",
+      "tests/run_tests.py" in _ci_steps and "evals/run_evals.py" in _ci_steps)
+check("CI workflow runs on push/PR to main",
+      "push" in _ci_steps and "pull_request" in _ci_steps
+      and "branches: [main]" in _ci_steps)
+with open(os.path.join(ROOT, "Dockerfile")) as f:
+    dockerfile = f.read()
+check("Dockerfile serves the service on port 8000",
+      "semantic_cache.service:app" in dockerfile and "EXPOSE 8000" in dockerfile)
+with open(os.path.join(ROOT, "RELEASES.md")) as f:
+    releases = f.read()
+check("release notes cover 0.7.0", "0.7.0" in releases)
 
 print(f"\n{len(FAILED)} failed" if FAILED else "\nall checks passed")
 sys.exit(1 if FAILED else 0)
