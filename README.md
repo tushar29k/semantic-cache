@@ -206,6 +206,25 @@ meaning — true-synonym pairs still miss, which is exactly what day 3's
 limitation note says. Swap in a real embedding model and the semantic
 column is the one that should grow.
 
+### Adversarial evals
+
+```bash
+python evals/run_adversarial.py     # poisoning, one-token boundaries, PAWS-style slice
+python evals/run_threshold_probe.py # similarity ladders + threshold sweep
+python evals/make_report.py         # rebuild evals/adversarial-report.md
+```
+
+The day-6 workload measures the happy path; this suite attacks the
+cache itself — planted entries with wrong answers (including one
+planted through the store-on-miss path), prompts changed by a single
+critical token (negation, number, entity, date), and the threshold's
+actual resolution. Headline: attack success rate 76.5% on seeds
+(92.9% on generated variants), false-hit rate 0.0% on unrelated
+questions, PAWS-style accuracy 43.8%. Full write-up in
+[RESEARCH.md](RESEARCH.md); generated tables in
+`evals/adversarial-report.md`. Report-only — the CI gate above is
+unchanged.
+
 ## Docker + CI (day 7)
 
 ```bash
